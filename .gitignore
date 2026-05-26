@@ -1,0 +1,36 @@
+# Python cache and bytecodes
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Large generated data files
+data/
+outputs/
+
+# Third-party cloned repositories / submodules
+free-llm-api-keys/
+
+# Temporary scratch space
+scratch/
+
+# IDE configurations
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# Paper-related manuscript and drafts (explicitly excluded)
+llm_bias_manuscript.md
+llm_bias_manuscript.tex
+paper_creation_process_en.tex
+references.bib
+proposal.txt
+GEMINI_FLASH_3_5_RESEARCH_CRITIQUE.md

@@ -1,0 +1,11 @@
+numpy>=1.24
+pandas>=2.0
+scipy>=1.10
+matplotlib>=3.7
+seaborn>=0.12
+requests>=2.28
+statsmodels>=0.14
+jupyter>=1.0
+ipykernel>=6.0
+# Optional: ML-based name-to-ethnicity classification
+# ethnicolr>=0.9
