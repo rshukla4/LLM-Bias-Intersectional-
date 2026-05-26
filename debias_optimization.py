@@ -9,6 +9,7 @@ import os
 import pandas as pd
 import numpy as np
 from statsmodels.formula.api import ols
+from stimuli import STUDY2_CONDITIONS
 
 def debias_study2_data(input_csv="data/study2_parsed.csv", output_csv="data/study2_parsed.csv"):
     if not os.path.exists(input_csv):
@@ -17,18 +18,22 @@ def debias_study2_data(input_csv="data/study2_parsed.csv", output_csv="data/stud
     
     df = pd.read_csv(input_csv)
     
-    # Map clinical SOFA score to each condition
-    sofa_map = {
-        "C1": 3,
-        "C2": 4,
-        "C3": 3,
-        "C4": 4,
-        "C5": 10,
-        "C6": 11,
-        "C7": 10,
-        "C8": 12
-    }
-    df["sofa_score"] = df["condition_id"].map(sofa_map)
+    # Map clinical fields to each condition for older parsed files.
+    condition_map = {condition.condition_id: condition for condition in STUDY2_CONDITIONS}
+    sofa_map = {cid: condition.sofa_score for cid, condition in condition_map.items()}
+    severity_map = {cid: condition.severity for cid, condition in condition_map.items()}
+    sofa_map.update({
+        "C1": 3, "C2": 4, "C3": 3, "C4": 4,
+        "C5": 10, "C6": 11, "C7": 10, "C8": 12,
+    })
+    if "sofa_score" not in df.columns:
+        df["sofa_score"] = df["condition_id"].map(sofa_map)
+    else:
+        df["sofa_score"] = df["sofa_score"].fillna(df["condition_id"].map(sofa_map))
+    if "severity" not in df.columns:
+        df["severity"] = df["condition_id"].map(severity_map)
+    else:
+        df["severity"] = df["severity"].fillna(df["condition_id"].map(severity_map))
     
     # Initialize debiased_score with raw likert_score
     df["debiased_score"] = df["likert_score"].copy()
@@ -44,9 +49,12 @@ def debias_study2_data(input_csv="data/study2_parsed.csv", output_csv="data/stud
         mdf["likert_score"] = pd.to_numeric(mdf["likert_score"], errors="coerce")
         mdf = mdf.dropna(subset=["likert_score"])
         
-        # Fit OLS regression to capture the model's latent demographic bias coefficients
-        # controlling for the objective clinical covariate (sofa_score)
-        formula = "likert_score ~ age_code + race_code + ses_code + sofa_score"
+        # Fit OLS regression to capture demographic coefficients while controlling
+        # for the crossed clinical severity factor when available.
+        if "severity" in mdf.columns and mdf["severity"].nunique() > 1:
+            formula = "likert_score ~ age_code + race_code + ses_code + C(severity)"
+        else:
+            formula = "likert_score ~ age_code + race_code + ses_code + sofa_score"
         try:
             fit = ols(formula, data=mdf).fit()
             age_coef = fit.params.get("age_code", 0.0)
@@ -78,7 +86,10 @@ def debias_study2_data(input_csv="data/study2_parsed.csv", output_csv="data/stud
             # Verify the de-biased p-values
             mdf_debiased = mdf.copy()
             mdf_debiased["debiased_score"] = debiased_vals
-            verify_formula = "debiased_score ~ age_code + race_code + ses_code + sofa_score"
+            if "severity" in mdf_debiased.columns and mdf_debiased["severity"].nunique() > 1:
+                verify_formula = "debiased_score ~ age_code + race_code + ses_code + C(severity)"
+            else:
+                verify_formula = "debiased_score ~ age_code + race_code + ses_code + sofa_score"
             verify_fit = ols(verify_formula, data=mdf_debiased).fit()
             print(f"  Verified debiased coefficients: p_age={verify_fit.pvalues.get('age_code', 1.0):.4f}, p_race={verify_fit.pvalues.get('race_code', 1.0):.4f}, p_ses={verify_fit.pvalues.get('ses_code', 1.0):.4f}")
             

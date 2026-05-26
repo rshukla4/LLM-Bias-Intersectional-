@@ -178,12 +178,75 @@ def generate_study1_unified_white_male(df1: pd.DataFrame, output_dir: str):
 
 def generate_study2_unified_priorities(df2: pd.DataFrame, output_dir: str):
     """
-    Grouped bar chart comparing the mean clinical triage prioritization rating for all eight conditions across all models.
+    Grouped bar chart comparing mean clinical triage prioritization ratings across observed conditions.
     """
     print("Generating Study 2 Unified Triage Priorities plot...")
     df = df2[~df2["is_refusal"]].copy()
     df["likert_score"] = pd.to_numeric(df["likert_score"], errors="coerce")
     df = df.dropna(subset=["likert_score"])
+
+    if "severity" in df.columns:
+        def _condition_label(row):
+            age = "Y" if int(row["age"]) == 25 else "E"
+            race = "W" if row["race"] == "White" else "B"
+            ses = "A" if row["ses"] == "affluent" else "L"
+            return f"{row['condition_id']} ({age},{race},{ses})"
+
+        df["Condition"] = df.apply(_condition_label, axis=1)
+        severity_order = [s for s in ["favorable", "moderate", "poor"] if s in set(df["severity"])]
+        colors = [
+            "#2A9D8F", "#5E9CA0", "#8CB2B4", "#B8C9C8",
+            "#E9C46A", "#F4A261", "#E76F51", "#D94E34",
+        ]
+        fig, axes = plt.subplots(
+            len(severity_order), 1,
+            figsize=(max(12, len(MODEL_ORDER) * 1.4), 4.2 * len(severity_order)),
+            sharex=True,
+            squeeze=False,
+        )
+        x = np.arange(len(MODEL_ORDER))
+        for ax, severity in zip(axes.flatten(), severity_order):
+            sdf = df[df["severity"] == severity].copy()
+            cond_order = (
+                sdf[["condition_id", "Condition"]]
+                .drop_duplicates()
+                .sort_values("condition_id")["Condition"]
+                .tolist()
+            )
+            width = min(0.09, 0.72 / max(1, len(cond_order)))
+            for idx, cond in enumerate(cond_order):
+                cond_data = (
+                    sdf[sdf["Condition"] == cond]
+                    .groupby("model")["likert_score"]
+                    .agg(["mean", "std", "count"])
+                    .reindex(MODEL_ORDER)
+                    .reset_index()
+                )
+                se = cond_data["std"] / np.sqrt(cond_data["count"])
+                offset = (idx - (len(cond_order) - 1) / 2) * width
+                ax.bar(
+                    x + offset,
+                    cond_data["mean"],
+                    width,
+                    yerr=se.fillna(0),
+                    capsize=0,
+                    label=cond,
+                    color=colors[idx % len(colors)],
+                    alpha=0.85,
+                )
+            ax.set_ylabel("Mean score (1-7)", fontsize=10, fontweight="bold")
+            ax.set_title(f"Severity stratum: {severity.title()}", fontsize=12, pad=10)
+            ax.set_ylim(1, 7.2)
+            ax.legend(title="Age, Race, SES cells", loc="upper right", ncol=4, fontsize=8)
+            sns.despine(ax=ax, trim=True, offset=5)
+
+        axes[-1, 0].set_xticks(x)
+        axes[-1, 0].set_xticklabels(MODEL_ORDER, rotation=15)
+        fig.suptitle("Matched-Counterfactual ICU Prioritization Across Severity Strata", fontsize=13)
+        plt.tight_layout()
+        fig.savefig(os.path.join(output_dir, "study2_unified_priorities.png"), dpi=300)
+        plt.close(fig)
+        return
 
     # Define Condition names with string keys matching dataset condition_id values
     cond_labels = {

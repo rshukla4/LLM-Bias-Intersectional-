@@ -104,28 +104,34 @@ def _generate_study1_response(phrase, model_key):
 def _generate_study2_response(condition, model_key):
     """
     Generate a synthetic Study 2 Likert response with embedded bias patterns.
-    Simulates: young > elderly, white > black, affluent > low-income.
+    Simulates crossed clinical severity plus possible demographic penalties.
     Model tier affects magnitude of bias.
     """
     base = 4.0  # neutral
 
+    # Clinical severity effect, crossed independently from demographics.
+    if condition.severity == "favorable":
+        base += 1.0
+    elif condition.severity == "poor":
+        base -= 1.0
+
     # Age effect
     if condition.age_code == 1:  # elderly
-        base -= 0.8
+        base -= 0.25
 
     # Race effect
     if condition.race_code == 1:  # black
-        base -= 0.6
+        base -= 0.25
 
     # SES effect
     if condition.ses_code == 1:  # low-income
-        base -= 0.5
+        base -= 0.20
 
     # Interaction: compound penalty
     if condition.age_code == 1 and condition.race_code == 1:
-        base -= 0.3  # extra penalty
+        base -= 0.15  # extra penalty
     if condition.race_code == 1 and condition.ses_code == 1:
-        base -= 0.2
+        base -= 0.10
 
     # Model-specific variation (simulated tier differences)
     if any(x in model_key for x in ["o3-pro", "opus"]):
@@ -237,7 +243,8 @@ def generate_study2_synthetic(
 
     columns = [
         "model", "model_version", "study_type", "condition_id",
-        "age", "race", "ses", "age_code", "race_code", "ses_code",
+        "age", "race", "ses", "severity", "sofa_score", "comorbidities",
+        "diagnosis", "prognosis", "age_code", "race_code", "ses_code", "severity_code",
         "iteration_id", "prompt", "raw_response", "latency_ms", "timestamp",
     ]
 
@@ -262,9 +269,15 @@ def generate_study2_synthetic(
                         "age": cond.age,
                         "race": cond.race,
                         "ses": cond.ses,
+                        "severity": cond.severity,
+                        "sofa_score": cond.sofa_score,
+                        "comorbidities": cond.comorbidities,
+                        "diagnosis": cond.diagnosis,
+                        "prognosis": cond.prognosis,
                         "age_code": cond.age_code,
                         "race_code": cond.race_code,
                         "ses_code": cond.ses_code,
+                        "severity_code": cond.severity_code,
                         "iteration_id": i,
                         "prompt": prompt,
                         "raw_response": response,

@@ -33,13 +33,18 @@ def descriptive_by_condition(df: pd.DataFrame) -> pd.DataFrame:
     Compute mean, SD, SE, n, and refusal rate for each condition.
     """
     valid = df.dropna(subset=["likert_score"]).copy()
+    group_cols = ["condition_id", "age", "race", "ses"]
+    if "severity" in valid.columns:
+        group_cols.append("severity")
+    if "sofa_score" in valid.columns:
+        group_cols.append("sofa_score")
 
     agg = (
-        valid.groupby(["condition_id", "age", "race", "ses"])["likert_score"]
+        valid.groupby(group_cols)["likert_score"]
         .agg(["mean", "std", "count"])
         .reset_index()
     )
-    agg.columns = ["condition_id", "age", "race", "ses", "mean", "std", "n"]
+    agg.columns = group_cols + ["mean", "std", "n"]
     agg["se"] = agg["std"] / np.sqrt(agg["n"])
 
     # Add refusal rates
@@ -63,7 +68,7 @@ def factorial_regression(df: pd.DataFrame, include_model: bool = True, dep_var: 
     Full factorial OLS regression:
     Score = β0 + β1(Age) + β2(Race) + β3(SES)
           + β4(Age×Race) + β5(Age×SES) + β6(Race×SES)
-          + β7(Age×Race×SES) + β8(SOFA) + β9(Model) + ε
+          + β7(Age×Race×SES) + β8(Severity) + β9(Model) + ε
 
     Args:
         df: Parsed Study 2 DataFrame with factor codes and score.
@@ -76,21 +81,30 @@ def factorial_regression(df: pd.DataFrame, include_model: bool = True, dep_var: 
     try:
         import statsmodels.api as sm
         from statsmodels.formula.api import ols
+        from patsy import dmatrices
     except ImportError:
-        return {"error": "statsmodels not installed. Run: pip install statsmodels"}
+        return {"error": "statsmodels/patsy not installed. Run: pip install statsmodels"}
 
     valid = df.dropna(subset=[dep_var]).copy()
     valid[dep_var] = valid[dep_var].astype(float)
 
     # Build formula
-    has_sofa = "sofa_score" in valid.columns and valid["sofa_score"].nunique() > 1
     base = f"{dep_var} ~ age_code * race_code * ses_code"
-    if has_sofa:
+    has_severity = "severity" in valid.columns and valid["severity"].nunique() > 1
+    has_sofa = "sofa_score" in valid.columns and valid["sofa_score"].nunique() > 1
+    if has_severity:
+        base += " + C(severity)"
+    elif has_sofa:
         base += " + sofa_score"
     if include_model and "model" in valid.columns and valid["model"].nunique() > 1:
         base += " + C(model)"
 
     try:
+        _, design_matrix = dmatrices(base, valid, return_type="dataframe")
+        matrix_rank = int(np.linalg.matrix_rank(design_matrix.values))
+        design_columns = int(design_matrix.shape[1])
+        rank_deficient = matrix_rank < design_columns
+
         model = ols(base, data=valid).fit()
 
         # Build interpretation
@@ -116,6 +130,12 @@ def factorial_regression(df: pd.DataFrame, include_model: bool = True, dep_var: 
                 )
 
         interpretation = f"Main effects and interactions for {dep_var}:\n" + "\n".join(interp_parts)
+        if rank_deficient:
+            interpretation = (
+                "WARNING: Design matrix is rank deficient. Coefficients should be treated as "
+                "diagnostic, not causally identified.\n"
+                + interpretation
+            )
 
         return {
             "summary_text": model.summary().as_text(),
@@ -127,6 +147,11 @@ def factorial_regression(df: pd.DataFrame, include_model: bool = True, dep_var: 
             "f_statistic": model.fvalue,
             "f_pvalue": model.f_pvalue,
             "n_obs": int(model.nobs),
+            "formula": base,
+            "design_rank": matrix_rank,
+            "design_columns": design_columns,
+            "rank_deficient": rank_deficient,
+            "condition_number": float(model.condition_number),
             "interpretation": interpretation,
         }
 
@@ -169,6 +194,7 @@ def refusal_analysis(df: pd.DataFrame) -> dict:
     by_race = df.groupby("race")["is_refusal"].mean()
     by_age = df.groupby("age")["is_refusal"].mean()
     by_ses = df.groupby("ses")["is_refusal"].mean()
+    by_severity = df.groupby("severity")["is_refusal"].mean() if "severity" in df.columns else pd.Series(dtype=float)
 
     interp = f"χ²({dof}) = {chi2:.3f}, p = {p:.4f}. "
     if p < 0.05:
@@ -187,6 +213,7 @@ def refusal_analysis(df: pd.DataFrame) -> dict:
         "by_race": by_race.to_dict(),
         "by_age": by_age.to_dict(),
         "by_ses": by_ses.to_dict(),
+        "by_severity": by_severity.to_dict(),
         "interpretation": interp,
     }
 
@@ -197,7 +224,7 @@ def refusal_analysis(df: pd.DataFrame) -> dict:
 
 def tukey_hsd_conditions(df: pd.DataFrame) -> dict:
     """
-    Tukey HSD post-hoc pairwise comparisons across all 8 conditions.
+    Tukey HSD post-hoc pairwise comparisons across observed conditions.
     """
     valid = df.dropna(subset=["likert_score"]).copy()
 
@@ -272,7 +299,8 @@ def plot_condition_bars(
     Bar chart of mean Likert score by condition with error bars.
     Replicates Figure 2 style from Fulgu & Capraro (2024).
     """
-    fig, ax = plt.subplots(figsize=(12, 6))
+    fig_width = max(12, len(desc_df) * 0.55)
+    fig, ax = plt.subplots(figsize=(fig_width, 6))
 
     desc_df = desc_df.sort_values("condition_id")
     x = range(len(desc_df))
@@ -293,10 +321,13 @@ def plot_condition_bars(
     labels = []
     for _, row in desc_df.iterrows():
         ses_label = "Aff" if row["ses"] == "affluent" else "Low"
-        labels.append(f"{row['condition_id']}\n{row['race']}/{row['age']}/{ses_label}")
+        severity_label = ""
+        if "severity" in row.index:
+            severity_label = f"\n{str(row['severity'])[:4].title()}"
+        labels.append(f"{row['condition_id']}\n{row['race']}/{row['age']}/{ses_label}{severity_label}")
 
     ax.set_xticks(x)
-    ax.set_xticklabels(labels, fontsize=9)
+    ax.set_xticklabels(labels, fontsize=8)
     ax.set_ylabel("Mean Likert Score (1-7)", fontsize=12)
     ax.set_title(
         f"Triage Prioritization by Patient Profile{' — ' + model_name if model_name else ''}",
@@ -499,11 +530,30 @@ def run_full_study2_analysis(
     df = pd.read_csv(parsed_csv)
     all_results = {}
 
-    # Ensure clinical sofa_score is present
-    sofa_map = {
-        "C1": 3, "C2": 4, "C3": 3, "C4": 4, "C5": 10, "C6": 11, "C7": 10, "C8": 12
+    # Ensure clinical fields are present for older parsed files.
+    from stimuli import STUDY2_CONDITIONS
+
+    condition_map = {condition.condition_id: condition for condition in STUDY2_CONDITIONS}
+    sofa_map = {cid: condition.sofa_score for cid, condition in condition_map.items()}
+    severity_map = {cid: condition.severity for cid, condition in condition_map.items()}
+    severity_code_map = {cid: condition.severity_code for cid, condition in condition_map.items()}
+    legacy_sofa_map = {
+        "C1": 3, "C2": 4, "C3": 3, "C4": 4,
+        "C5": 10, "C6": 11, "C7": 10, "C8": 12,
     }
-    df["sofa_score"] = df["condition_id"].map(sofa_map)
+    sofa_map.update(legacy_sofa_map)
+    if "sofa_score" not in df.columns:
+        df["sofa_score"] = df["condition_id"].map(sofa_map)
+    else:
+        df["sofa_score"] = df["sofa_score"].fillna(df["condition_id"].map(sofa_map))
+    if "severity" not in df.columns:
+        df["severity"] = df["condition_id"].map(severity_map)
+    else:
+        df["severity"] = df["severity"].fillna(df["condition_id"].map(severity_map))
+    if "severity_code" not in df.columns:
+        df["severity_code"] = df["condition_id"].map(severity_code_map)
+    else:
+        df["severity_code"] = df["severity_code"].fillna(df["condition_id"].map(severity_code_map))
 
     models_in_data = df["model"].unique()
     logger.info(f"Running Study 2 analysis on {len(df)} rows, models: {models_in_data}")

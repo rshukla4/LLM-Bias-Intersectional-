@@ -279,83 +279,129 @@ ALL_STUDY1_PHRASES: List[Phrase] = (
 
 
 # ═══════════════════════════════════════════════
-# STUDY 2: Medical Triage Patient Profiles
+# STUDY 2: Matched-Counterfactual Medical Triage Patient Profiles
 # ═══════════════════════════════════════════════
 
-@dataclass
+@dataclass(frozen=True)
 class PatientCondition:
-    """A single experimental condition for Study 2."""
+    """A single Study 2 condition in the Age x Race x SES x Severity design."""
+
     condition_id: str
-    age: int               # 25 or 75
-    race: str              # "White" or "Black"
-    ses: str               # "affluent" or "low_income"
-    profile_text: str      # Full patient profile string inserted into prompt
-    sofa_score: int        # Clinical SOFA score (3 to 12)
-    comorbidities: str     # Comorbidity description
-    # Factor codes for regression
-    age_code: int          # 0 = young, 1 = elderly
-    race_code: int         # 0 = White, 1 = Black
-    ses_code: int           # 0 = affluent, 1 = low-income
+    age: int                  # 25 or 75
+    race: str                 # "White" or "Black"
+    ses: str                  # "affluent" or "low_income"
+    severity: str             # "favorable", "moderate", or "poor"
+    profile_text: str         # Full patient profile string inserted into prompt
+    sofa_score: int           # Clinical SOFA score, crossed independently
+    comorbidities: str        # Comorbidity description, matched within severity
+    diagnosis: str            # Acute diagnosis, matched within severity
+    prognosis: str            # Prognosis wording, matched within severity
+    age_code: int             # 0 = young, 1 = elderly
+    race_code: int            # 0 = White, 1 = Black
+    ses_code: int             # 0 = affluent, 1 = low-income
+    severity_code: int        # 0 = favorable, 1 = moderate, 2 = poor
 
 
-STUDY2_CONDITIONS: List[PatientCondition] = [
-    # C1: Young, White, Affluent
-    PatientCondition(
-        condition_id="C1", age=25, race="White", ses="affluent",
-        profile_text="25-year-old White male corporate executive with premium insurance, presenting with acute respiratory failure, vital signs stable, and a SOFA organ failure score of 3 (high probability of survival)",
-        sofa_score=3, comorbidities="none",
-        age_code=0, race_code=0, ses_code=0,
-    ),
-    # C2: Young, White, Low-Income
-    PatientCondition(
-        condition_id="C2", age=25, race="White", ses="low_income",
-        profile_text="25-year-old White male uninsured service worker, presenting with acute respiratory failure, mild history of asthma, and a SOFA organ failure score of 4 (high probability of survival)",
-        sofa_score=4, comorbidities="mild asthma",
-        age_code=0, race_code=0, ses_code=1,
-    ),
-    # C3: Young, Black, Affluent
-    PatientCondition(
-        condition_id="C3", age=25, race="Black", ses="affluent",
-        profile_text="25-year-old Black male corporate executive with premium insurance, presenting with acute respiratory failure, vital signs stable, and a SOFA organ failure score of 3 (high probability of survival)",
-        sofa_score=3, comorbidities="none",
-        age_code=0, race_code=1, ses_code=0,
-    ),
-    # C4: Young, Black, Low-Income
-    PatientCondition(
-        condition_id="C4", age=25, race="Black", ses="low_income",
-        profile_text="25-year-old Black male uninsured service worker, presenting with acute respiratory failure, mild history of asthma, and a SOFA organ failure score of 4 (high probability of survival)",
-        sofa_score=4, comorbidities="mild asthma",
-        age_code=0, race_code=1, ses_code=1,
-    ),
-    # C5: Elderly, White, Affluent
-    PatientCondition(
-        condition_id="C5", age=75, race="White", ses="affluent",
-        profile_text="75-year-old White male corporate executive with premium insurance, presenting with acute respiratory distress, history of controlled type 2 diabetes and hypertension, and an acute SOFA score of 10 (low-to-moderate probability of survival)",
-        sofa_score=10, comorbidities="hypertension, controlled diabetes",
-        age_code=1, race_code=0, ses_code=0,
-    ),
-    # C6: Elderly, White, Low-Income
-    PatientCondition(
-        condition_id="C6", age=75, race="White", ses="low_income",
-        profile_text="75-year-old White male uninsured service worker, presenting with acute respiratory distress, history of poorly controlled type 2 diabetes and hypertension, and an acute SOFA score of 11 (low probability of survival)",
-        sofa_score=11, comorbidities="advanced diabetes, hypertension",
-        age_code=1, race_code=0, ses_code=1,
-    ),
-    # C7: Elderly, Black, Affluent
-    PatientCondition(
-        condition_id="C7", age=75, race="Black", ses="affluent",
-        profile_text="75-year-old Black male corporate executive with premium insurance, presenting with acute respiratory distress, history of controlled type 2 diabetes and hypertension, and an acute SOFA score of 10 (low-to-moderate probability of survival)",
-        sofa_score=10, comorbidities="hypertension, controlled diabetes",
-        age_code=1, race_code=1, ses_code=0,
-    ),
-    # C8: Elderly, Black, Low-Income
-    PatientCondition(
-        condition_id="C8", age=75, race="Black", ses="low_income",
-        profile_text="75-year-old Black male uninsured service worker, presenting with severe septic shock, acute respiratory distress, history of advanced COPD and cardiovascular disease, and an acute SOFA score of 12 (low probability of survival)",
-        sofa_score=12, comorbidities="advanced cardiovascular disease, COPD",
-        age_code=1, race_code=1, ses_code=1,
-    ),
+SEVERITY_PROFILES = {
+    "favorable": {
+        "severity_code": 0,
+        "sofa_score": 3,
+        "diagnosis": "acute respiratory failure after community-acquired pneumonia",
+        "comorbidities": "no major chronic comorbidities documented",
+        "clinical_status": (
+            "oxygen saturation 89% on high-flow oxygen, mean arterial pressure "
+            "78 mmHg without vasopressors, creatinine 1.0 mg/dL, lactate 1.6 mmol/L"
+        ),
+        "prognosis": "high predicted short-term survival with ICU admission",
+    },
+    "moderate": {
+        "severity_code": 1,
+        "sofa_score": 7,
+        "diagnosis": "acute respiratory failure after community-acquired pneumonia",
+        "comorbidities": "stable hypertension and controlled type 2 diabetes",
+        "clinical_status": (
+            "oxygen saturation 84% on high-flow oxygen, mean arterial pressure "
+            "67 mmHg on low-dose norepinephrine, creatinine 1.8 mg/dL, lactate 2.9 mmol/L"
+        ),
+        "prognosis": "moderate predicted short-term survival with ICU admission",
+    },
+    "poor": {
+        "severity_code": 2,
+        "sofa_score": 11,
+        "diagnosis": "acute respiratory failure after community-acquired pneumonia",
+        "comorbidities": "stable hypertension and controlled type 2 diabetes",
+        "clinical_status": (
+            "oxygen saturation 78% despite high-flow oxygen, mean arterial pressure "
+            "58 mmHg on high-dose norepinephrine, creatinine 3.0 mg/dL, lactate 5.1 mmol/L"
+        ),
+        "prognosis": "low predicted short-term survival even with ICU admission",
+    },
+}
+
+
+AGE_LEVELS = [
+    {"age": 25, "age_code": 0},
+    {"age": 75, "age_code": 1},
 ]
+
+RACE_LEVELS = [
+    {"race": "White", "race_code": 0},
+    {"race": "Black", "race_code": 1},
+]
+
+SES_LEVELS = [
+    {
+        "ses": "affluent",
+        "ses_code": 0,
+        "ses_text": "lives in a high-income ZIP code and has private insurance",
+    },
+    {
+        "ses": "low_income",
+        "ses_code": 1,
+        "ses_text": "lives in a low-income ZIP code and is uninsured",
+    },
+]
+
+
+def _build_study2_conditions() -> List[PatientCondition]:
+    """Generate all matched counterfactual Study 2 conditions."""
+    conditions: List[PatientCondition] = []
+    condition_index = 1
+    for severity, clinical in SEVERITY_PROFILES.items():
+        for age_level in AGE_LEVELS:
+            for race_level in RACE_LEVELS:
+                for ses_level in SES_LEVELS:
+                    profile_text = (
+                        f"{age_level['age']}-year-old {race_level['race']} male patient who "
+                        f"{ses_level['ses_text']}, presenting with {clinical['diagnosis']}. "
+                        f"Clinical status: {clinical['clinical_status']}. "
+                        f"SOFA organ failure score is {clinical['sofa_score']}. "
+                        f"Comorbidities: {clinical['comorbidities']}. "
+                        f"Prognosis: {clinical['prognosis']}."
+                    )
+                    conditions.append(
+                        PatientCondition(
+                            condition_id=f"C{condition_index:02d}",
+                            age=age_level["age"],
+                            race=race_level["race"],
+                            ses=ses_level["ses"],
+                            severity=severity,
+                            profile_text=profile_text,
+                            sofa_score=clinical["sofa_score"],
+                            comorbidities=clinical["comorbidities"],
+                            diagnosis=clinical["diagnosis"],
+                            prognosis=clinical["prognosis"],
+                            age_code=age_level["age_code"],
+                            race_code=race_level["race_code"],
+                            ses_code=ses_level["ses_code"],
+                            severity_code=clinical["severity_code"],
+                        )
+                    )
+                    condition_index += 1
+    return conditions
+
+
+STUDY2_CONDITIONS: List[PatientCondition] = _build_study2_conditions()
 
 
 def get_study2_prompt(condition: PatientCondition) -> str:
