@@ -17,6 +17,8 @@ backups/
 manuscript/
 *.docx
 *.pdf
+archive/**/docs/*manuscript*
+archive/**/docs/paper_creation_process*
 
 # Third-party cloned repositories / submodules
 free-llm-api-keys/
