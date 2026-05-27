@@ -297,8 +297,94 @@ def plot_condition_bars(
 ) -> plt.Figure:
     """
     Bar chart of mean Likert score by condition with error bars.
-    Replicates Figure 2 style from Fulgu & Capraro (2024).
+    For the corrected Study 2 design, panels are split by clinical severity
+    so the 24-condition layout remains readable in manuscript figures.
     """
+    if "severity" in desc_df.columns:
+        plot_df = desc_df.copy()
+        severity_order = [s for s in ["favorable", "moderate", "poor"] if s in set(plot_df["severity"])]
+        profile_order = [
+            (25, "White"),
+            (25, "Black"),
+            (75, "White"),
+            (75, "Black"),
+        ]
+        profile_labels = ["25 W", "25 B", "75 W", "75 B"]
+        ses_order = ["affluent", "low_income"]
+        ses_labels = {"affluent": "Affluent", "low_income": "Low-income"}
+        ses_colors = {"affluent": "#2E5984", "low_income": "#C75B3F"}
+
+        fig, axes = plt.subplots(
+            1,
+            len(severity_order),
+            figsize=(4.5 * len(severity_order), 4.2),
+            sharey=True,
+            squeeze=False,
+        )
+        axes = axes.flatten()
+        x = np.arange(len(profile_order))
+        width = 0.34
+
+        for ax, severity in zip(axes, severity_order):
+            sdf = plot_df[plot_df["severity"] == severity]
+            for offset_index, ses in enumerate(ses_order):
+                means = []
+                ses_values = []
+                for age, race in profile_order:
+                    match = sdf[
+                        (sdf["age"] == age)
+                        & (sdf["race"] == race)
+                        & (sdf["ses"] == ses)
+                    ]
+                    if match.empty:
+                        means.append(np.nan)
+                        ses_values.append(0.0)
+                    else:
+                        means.append(float(match["mean"].iloc[0]))
+                        ses_values.append(float(match["se"].iloc[0]))
+
+                offset = (offset_index - 0.5) * width
+                bars = ax.bar(
+                    x + offset,
+                    means,
+                    width,
+                    yerr=ses_values,
+                    capsize=3,
+                    color=ses_colors[ses],
+                    edgecolor="white",
+                    linewidth=0.8,
+                    label=ses_labels[ses],
+                )
+
+            ax.set_title(severity.title(), fontsize=11, fontweight="bold")
+            ax.set_xticks(x)
+            ax.set_xticklabels(profile_labels, fontsize=9)
+            ax.axhline(y=4, color="#777777", linestyle="--", linewidth=0.8, alpha=0.45)
+            ax.set_ylim(1, 7.2)
+            ax.spines["top"].set_visible(False)
+            ax.spines["right"].set_visible(False)
+            ax.grid(axis="y", color="#EAEAEA", linewidth=0.6)
+
+        axes[0].set_ylabel("Mean prioritization rating (1-7)", fontsize=11)
+        axes[0].legend(frameon=False, loc="upper left", fontsize=9)
+        fig.suptitle(
+            f"ICU Prioritization by Matched Clinical Severity{' - ' + model_name if model_name else ''}",
+            fontsize=12,
+            fontweight="bold",
+        )
+        fig.text(
+            0.5,
+            0.01,
+            "Within each panel, diagnosis, SOFA score, vital signs, comorbidities, and prognosis are held constant. Bars show mean +/- SE.",
+            ha="center",
+            fontsize=9,
+            color="#444444",
+        )
+        plt.tight_layout(rect=[0, 0.05, 1, 0.93])
+        if save_path:
+            fig.savefig(save_path, dpi=300, bbox_inches="tight")
+        return fig
+
     fig_width = max(12, len(desc_df) * 0.55)
     fig, ax = plt.subplots(figsize=(fig_width, 6))
 
@@ -333,15 +419,24 @@ def plot_condition_bars(
         f"Triage Prioritization by Patient Profile{' — ' + model_name if model_name else ''}",
         fontsize=14, fontweight="bold",
     )
-    ax.set_ylim(0, 7.5)
+    legacy_label_offset = max(0.18, float(desc_df["se"].fillna(0).max()) * 0.8)
+    legacy_label_top = float((desc_df["mean"] + desc_df["se"].fillna(0)).max()) + legacy_label_offset
+    ax.set_ylim(0, max(7.5, legacy_label_top + legacy_label_offset))
     ax.axhline(y=4, color="gray", linestyle="--", alpha=0.4, label="Neutral (4)")
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
 
     # Value labels
-    for bar, m in zip(bars, desc_df["mean"]):
-        ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.15,
-                f"{m:.2f}", ha="center", fontsize=10, fontweight="bold")
+    for bar, m, se in zip(bars, desc_df["mean"], desc_df["se"].fillna(0)):
+        ax.text(
+            bar.get_x() + bar.get_width()/2,
+            float(m) + float(se) + legacy_label_offset,
+            f"{m:.2f}",
+            ha="center",
+            va="bottom",
+            fontsize=10,
+            fontweight="bold",
+        )
 
     # Legend
     from matplotlib.patches import Patch
@@ -503,13 +598,16 @@ def plot_refusal_rates(
         f"Model Refusal Rates by Condition{' — ' + model_name if model_name else ''}",
         fontsize=13, fontweight="bold",
     )
-    ax.set_ylim(0, max(rates) * 1.3 + 5 if max(rates) > 0 else 10)
+    max_rate = max(rates) if rates else 0
+    label_offset = max(1.5, max_rate * 0.08)
+    ax.set_ylim(0, max(10, max_rate + label_offset * 3.0))
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
 
     for i, (c, r) in enumerate(zip(conditions, rates)):
         if r > 0:
-            ax.text(i, r + 1, f"{r:.1f}%", ha="center", fontsize=10)
+            tier_offset = label_offset * (1.0 + 0.55 * (i % 2))
+            ax.text(i, r + tier_offset, f"{r:.1f}%", ha="center", va="bottom", fontsize=10)
 
     plt.tight_layout()
     if save_path:
@@ -594,31 +692,36 @@ def run_full_study2_analysis(
         tukey = tukey_hsd_conditions(mdf)
 
         # 5. Plots
-        plot_condition_bars(
+        fig = plot_condition_bars(
             desc, model_name,
             save_path=os.path.join(output_dir, f"study2_conditions_{model_name}.png"),
         )
-        plot_coefficient_forest(
+        plt.close(fig)
+        fig = plot_coefficient_forest(
             reg,
             save_path=os.path.join(output_dir, f"study2_coefficients_{model_name}.png"),
         )
+        plt.close(fig)
         if "error" not in reg_debiased and reg_debiased:
-            plot_coefficient_forest(
+            fig = plot_coefficient_forest(
                 reg_debiased,
                 save_path=os.path.join(output_dir, f"study2_debiased_coefficients_{model_name}.png"),
             )
+            plt.close(fig)
         for f1, f2 in [("race", "age"), ("race", "ses"), ("age", "ses")]:
-            plot_interaction(
+            fig = plot_interaction(
                 mdf, f1, f2, model_name,
                 save_path=os.path.join(
                     output_dir,
                     f"study2_interaction_{f1}_{f2}_{model_name}.png",
                 ),
             )
-        plot_refusal_rates(
+            plt.close(fig)
+        fig = plot_refusal_rates(
             refusals, model_name,
             save_path=os.path.join(output_dir, f"study2_refusals_{model_name}.png"),
         )
+        plt.close(fig)
 
         all_results[model_name] = {
             "descriptives": desc,
@@ -634,10 +737,11 @@ def run_full_study2_analysis(
         all_results["cross_model_regression"] = cross_reg
         if "error" not in cross_reg:
             logger.info(f"Cross-model biased regression:\n{cross_reg['interpretation']}")
-            plot_coefficient_forest(
+            fig = plot_coefficient_forest(
                 cross_reg,
                 save_path=os.path.join(output_dir, "study2_coefficients_all_models.png"),
             )
+            plt.close(fig)
         
         # Cross-model regression (Debiased)
         if "debiased_score" in df.columns:
@@ -645,10 +749,11 @@ def run_full_study2_analysis(
             all_results["cross_model_regression_debiased"] = cross_reg_debiased
             if "error" not in cross_reg_debiased:
                 logger.info(f"Cross-model debiased regression:\n{cross_reg_debiased['interpretation']}")
-                plot_coefficient_forest(
+                fig = plot_coefficient_forest(
                     cross_reg_debiased,
                     save_path=os.path.join(output_dir, "study2_debiased_coefficients_all_models.png"),
                 )
+                plt.close(fig)
 
     plt.close("all")
     return all_results

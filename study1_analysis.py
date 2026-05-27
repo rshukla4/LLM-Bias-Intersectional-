@@ -337,14 +337,23 @@ def plot_inclusivity_comparison(
         f"Inclusivity Index by Role Level{' — ' + model_name if model_name else ''}",
         fontsize=14, fontweight="bold"
     )
-    ax.set_ylim(0, max(means) * 1.4 + 0.1)
+    label_offset = max(0.035, (max(means) - min(means) if len(means) > 1 else max(means)) * 0.18)
+    label_top = max(m + se + label_offset for m, se in zip(means, ses))
+    ax.set_ylim(0, max(max(means) * 1.4 + 0.1, label_top + label_offset))
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
 
     # Value labels
     for bar, m, se in zip(bars, means, ses):
-        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + se + 0.02,
-                f"{m:.3f}", ha="center", fontsize=11, fontweight="bold")
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            m + se + label_offset,
+            f"{m:.3f}",
+            ha="center",
+            va="bottom",
+            fontsize=11,
+            fontweight="bold",
+        )
 
     plt.tight_layout()
     if save_path:
@@ -478,18 +487,21 @@ def run_full_study1_analysis(
         logger.info(f"Chi-square: {chi2['interpretation']}")
 
         # 4. Plots
-        plot_inclusivity_comparison(
+        fig = plot_inclusivity_comparison(
             phrase_idx, model_name,
             save_path=os.path.join(output_dir, f"study1_inclusivity_{model_name}.png"),
         )
-        plot_racial_distribution(
+        plt.close(fig)
+        fig = plot_racial_distribution(
             mdf, model_name,
             save_path=os.path.join(output_dir, f"study1_racial_dist_{model_name}.png"),
         )
-        plot_gender_by_phrase(
+        plt.close(fig)
+        fig = plot_gender_by_phrase(
             mdf, model_name,
             save_path=os.path.join(output_dir, f"study1_gender_phrase_{model_name}.png"),
         )
+        plt.close(fig)
 
         all_results[model_name] = {
             "inclusivity_index": phrase_idx,

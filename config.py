@@ -54,6 +54,7 @@ class ModelConfig:
     temperature: Optional[float] = 1.0
     top_p: Optional[float] = None
     source_type: str = "live_api"
+    fallback_model_id: Optional[str] = None
 
     @property
     def api_key(self) -> str:
@@ -75,7 +76,7 @@ MODELS: Dict[str, ModelConfig] = {
             "OPENAI_CHAT_COMPLETIONS_URL",
             "https://openrouter.ai/api/v1/chat/completions" if OPENROUTER_KEY else "https://api.openai.com/v1/chat/completions",
         ),
-        max_tokens=_env_int("OPENAI_MAX_TOKENS", 150),
+        max_tokens=_env_int("OPENAI_MAX_TOKENS", 4096),
         timeout=_env_int("OPENAI_TIMEOUT", 120),
         temperature=_env_optional_float("OPENAI_TEMPERATURE", 1.0),
         top_p=_env_optional_float("OPENAI_TOP_P", 1.0),
@@ -89,7 +90,7 @@ MODELS: Dict[str, ModelConfig] = {
             "ANTHROPIC_MESSAGES_URL",
             "https://openrouter.ai/api/v1/chat/completions" if OPENROUTER_KEY else "https://api.anthropic.com/v1/messages",
         ),
-        max_tokens=_env_int("ANTHROPIC_MAX_TOKENS", 150),
+        max_tokens=_env_int("ANTHROPIC_MAX_TOKENS", 4096),
         timeout=_env_int("ANTHROPIC_TIMEOUT", 120),
         temperature=_env_optional_float("ANTHROPIC_TEMPERATURE", 1.0),
         top_p=_env_optional_float("ANTHROPIC_TOP_P", None),
@@ -103,7 +104,7 @@ MODELS: Dict[str, ModelConfig] = {
             "ANTHROPIC_MESSAGES_URL",
             "https://openrouter.ai/api/v1/chat/completions" if OPENROUTER_KEY else "https://api.anthropic.com/v1/messages",
         ),
-        max_tokens=_env_int("ANTHROPIC_MAX_TOKENS", 150),
+        max_tokens=_env_int("ANTHROPIC_MAX_TOKENS", 4096),
         timeout=_env_int("ANTHROPIC_TIMEOUT", 120),
         temperature=_env_optional_float("ANTHROPIC_TEMPERATURE", 1.0),
         top_p=_env_optional_float("ANTHROPIC_TOP_P", None),
@@ -117,7 +118,7 @@ MODELS: Dict[str, ModelConfig] = {
             "GOOGLE_GENERATE_CONTENT_URL",
             "https://openrouter.ai/api/v1/chat/completions" if OPENROUTER_KEY else "https://generativelanguage.googleapis.com/v1beta/models",
         ),
-        max_tokens=_env_int("GOOGLE_MAX_TOKENS", 150),
+        max_tokens=_env_int("GOOGLE_MAX_TOKENS", 4096),
         timeout=_env_int("GOOGLE_TIMEOUT", 120),
         temperature=_env_optional_float("GOOGLE_TEMPERATURE", 1.0),
         top_p=_env_optional_float("GOOGLE_TOP_P", 1.0),
@@ -131,7 +132,7 @@ MODELS: Dict[str, ModelConfig] = {
             "GOOGLE_GENERATE_CONTENT_URL",
             "https://openrouter.ai/api/v1/chat/completions" if OPENROUTER_KEY else "https://generativelanguage.googleapis.com/v1beta/models",
         ),
-        max_tokens=_env_int("GOOGLE_MAX_TOKENS", 150),
+        max_tokens=_env_int("GOOGLE_MAX_TOKENS", 4096),
         timeout=_env_int("GOOGLE_TIMEOUT", 120),
         temperature=_env_optional_float("GOOGLE_TEMPERATURE", 1.0),
         top_p=_env_optional_float("GOOGLE_TOP_P", 1.0),
@@ -145,7 +146,7 @@ MODELS: Dict[str, ModelConfig] = {
             "GOOGLE_GENERATE_CONTENT_URL",
             "https://openrouter.ai/api/v1/chat/completions" if OPENROUTER_KEY else "https://generativelanguage.googleapis.com/v1beta/models",
         ),
-        max_tokens=_env_int("GOOGLE_MAX_TOKENS", 150),
+        max_tokens=_env_int("GOOGLE_MAX_TOKENS", 4096),
         timeout=_env_int("GOOGLE_TIMEOUT", 120),
         temperature=_env_optional_float("GOOGLE_TEMPERATURE", 1.0),
         top_p=_env_optional_float("GOOGLE_TOP_P", 1.0),
@@ -153,13 +154,13 @@ MODELS: Dict[str, ModelConfig] = {
     "deepseek-v4-pro": ModelConfig(
         name="DeepSeek v4 Pro",
         provider="openai" if OPENROUTER_KEY else "deepseek",
-        model_id=_env_str("DEEPSEEK_PRO_MODEL_ID", "deepseek/deepseek-chat" if OPENROUTER_KEY else "deepseek-v4-pro"),
+        model_id=_env_str("DEEPSEEK_PRO_MODEL_ID", "deepseek/deepseek-v4-pro" if OPENROUTER_KEY else "deepseek-v4-pro"),
         api_key_env="OPENROUTER_API_KEY" if OPENROUTER_KEY else "DEEPSEEK_API_KEY",
         base_url=_env_str(
             "DEEPSEEK_CHAT_COMPLETIONS_URL",
             "https://openrouter.ai/api/v1/chat/completions" if OPENROUTER_KEY else "https://api.deepseek.com/chat/completions",
         ),
-        max_tokens=_env_int("DEEPSEEK_MAX_TOKENS", 150),
+        max_tokens=_env_int("DEEPSEEK_MAX_TOKENS", 4096),
         timeout=_env_int("DEEPSEEK_TIMEOUT", 120),
         temperature=_env_optional_float("DEEPSEEK_TEMPERATURE", 1.0),
         top_p=_env_optional_float("DEEPSEEK_TOP_P", 1.0),
@@ -167,13 +168,13 @@ MODELS: Dict[str, ModelConfig] = {
     "deepseek-v4-flash": ModelConfig(
         name="DeepSeek v4 Flash",
         provider="openai" if OPENROUTER_KEY else "deepseek",
-        model_id=_env_str("DEEPSEEK_FLASH_MODEL_ID", "deepseek/deepseek-chat" if OPENROUTER_KEY else "deepseek-v4-flash"),
+        model_id=_env_str("DEEPSEEK_FLASH_MODEL_ID", "deepseek/deepseek-v4-flash" if OPENROUTER_KEY else "deepseek-v4-flash"),
         api_key_env="OPENROUTER_API_KEY" if OPENROUTER_KEY else "DEEPSEEK_API_KEY",
         base_url=_env_str(
             "DEEPSEEK_CHAT_COMPLETIONS_URL",
             "https://openrouter.ai/api/v1/chat/completions" if OPENROUTER_KEY else "https://api.deepseek.com/chat/completions",
         ),
-        max_tokens=_env_int("DEEPSEEK_MAX_TOKENS", 150),
+        max_tokens=_env_int("DEEPSEEK_MAX_TOKENS", 4096),
         timeout=_env_int("DEEPSEEK_TIMEOUT", 120),
         temperature=_env_optional_float("DEEPSEEK_TEMPERATURE", 1.0),
         top_p=_env_optional_float("DEEPSEEK_TOP_P", 1.0),
@@ -182,12 +183,13 @@ MODELS: Dict[str, ModelConfig] = {
         name="Google Gemma 4 31B Free",
         provider="openai", # Hosted on OpenRouter, always uses openai format
         model_id=_env_str("GOOGLE_GEMMA_FREE_MODEL_ID", "google/gemma-4-31b-it:free"),
+        fallback_model_id=_env_str("GOOGLE_GEMMA_FALLBACK_MODEL_ID", "google/gemma-4-31b-it"),
         api_key_env="OPENROUTER_API_KEY",
         base_url=_env_str(
             "GOOGLE_GEMMA_FREE_URL",
             "https://openrouter.ai/api/v1/chat/completions",
         ),
-        max_tokens=_env_int("GOOGLE_MAX_TOKENS", 150),
+        max_tokens=_env_int("GOOGLE_MAX_TOKENS", 4096),
         timeout=_env_int("GOOGLE_TIMEOUT", 120),
         temperature=_env_optional_float("GOOGLE_TEMPERATURE", 1.0),
         top_p=_env_optional_float("GOOGLE_TOP_P", 1.0),

@@ -167,6 +167,11 @@ def parse_study1_response(raw_response: str) -> Dict[str, Any]:
         "parse_errors": [],
     }
 
+    if raw_response is None or (isinstance(raw_response, float) and np.isnan(raw_response)):
+        raw_response = ""
+    else:
+        raw_response = str(raw_response)
+
     if not raw_response or raw_response == "__FAILED__":
         result["is_refusal"] = True
         result["parse_errors"].append("Empty or failed response")
@@ -221,6 +226,11 @@ def parse_likert_score(raw_response: str) -> Dict[str, Any]:
         "is_refusal": False,
         "parse_errors": [],
     }
+
+    if raw_response is None or (isinstance(raw_response, float) and np.isnan(raw_response)):
+        raw_response = ""
+    else:
+        raw_response = str(raw_response)
 
     if not raw_response or raw_response == "__FAILED__":
         result["is_refusal"] = True

@@ -11,6 +11,12 @@ ENV/
 # Large generated data files
 data/
 outputs/
+backups/
+
+# Generated manuscript exports
+manuscript/
+*.docx
+*.pdf
 
 # Third-party cloned repositories / submodules
 free-llm-api-keys/

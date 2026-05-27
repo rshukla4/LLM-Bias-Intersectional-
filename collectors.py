@@ -314,56 +314,104 @@ PROVIDER_CALLERS = {
 }
 
 
+def _fallback_config(config: ModelConfig, model_id: str) -> ModelConfig:
+    return ModelConfig(
+        name=config.name,
+        provider=config.provider,
+        model_id=model_id,
+        api_key_env=config.api_key_env,
+        base_url=config.base_url,
+        max_tokens=config.max_tokens,
+        timeout=config.timeout,
+        temperature=config.temperature,
+        top_p=config.top_p,
+        source_type=config.source_type,
+        fallback_model_id=None,
+    )
+
+
 def call_model(model_key: str, prompt: str) -> Dict[str, Any]:
     config = MODELS[model_key]
-    caller = PROVIDER_CALLERS[config.provider]
+    configs = [config]
+    if config.fallback_model_id:
+        configs.append(_fallback_config(config, config.fallback_model_id))
 
     last_error: Optional[BaseException] = None
-    for attempt in range(1, MAX_RETRIES + 1):
-        try:
-            started = time.time()
-            result = caller(config, prompt)
-            result["latency_ms"] = round((time.time() - started) * 1000, 1)
-            result["source_type"] = config.source_type
-            result["provider"] = config.provider
-            result["provider_model_id"] = config.model_id
-            _rate_limit_pause(model_key)
-            return result
-        except requests.Timeout as exc:
-            last_error = exc
-            retryable = True
-            status_code = None
-            message = f"{config.provider} request timed out: {exc}"
-        except requests.RequestException as exc:
-            last_error = exc
-            retryable = True
-            status_code = None
-            message = f"{config.provider} request failed: {exc}"
-        except CollectionError as exc:
-            last_error = exc
-            retryable = exc.retryable
-            status_code = exc.status_code
-            message = str(exc)
+    for config_index, active_config in enumerate(configs):
+        caller = PROVIDER_CALLERS[active_config.provider]
+        if config_index > 0:
+            logger.warning(
+                "[%s] switching to fallback model_id=%s after primary model_id=%s failed.",
+                model_key,
+                active_config.model_id,
+                config.model_id,
+            )
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                started = time.time()
+                result = caller(active_config, prompt)
+                result["latency_ms"] = round((time.time() - started) * 1000, 1)
+                result["source_type"] = active_config.source_type
+                if "openai" in model_key:
+                    result["provider"] = "openai"
+                elif "anthropic" in model_key:
+                    result["provider"] = "anthropic"
+                elif "google" in model_key or "gemma" in model_key:
+                    result["provider"] = "google"
+                elif "deepseek" in model_key:
+                    result["provider"] = "deepseek"
+                else:
+                    result["provider"] = active_config.provider
+                result["provider_model_id"] = active_config.model_id
+                _rate_limit_pause(model_key)
+                return result
+            except requests.Timeout as exc:
+                last_error = exc
+                retryable = True
+                status_code = None
+                message = f"{active_config.provider} request timed out: {exc}"
+            except requests.RequestException as exc:
+                last_error = exc
+                retryable = True
+                status_code = None
+                message = f"{active_config.provider} request failed: {exc}"
+            except CollectionError as exc:
+                last_error = exc
+                retryable = exc.retryable
+                status_code = exc.status_code
+                message = str(exc)
 
-        if not retryable:
-            raise CollectionError(message, retryable=False, status_code=status_code) from last_error
-        if attempt >= MAX_RETRIES:
-            raise CollectionError(
-                f"{model_key} failed after {MAX_RETRIES} attempts: {message}",
-                retryable=False,
-                status_code=status_code,
-            ) from last_error
+            if not retryable:
+                if config_index + 1 < len(configs):
+                    logger.warning("[%s] primary model failed permanently: %s", model_key, message)
+                    break
+                raise CollectionError(message, retryable=False, status_code=status_code) from last_error
+            if attempt >= MAX_RETRIES:
+                if config_index + 1 < len(configs):
+                    logger.warning(
+                        "[%s] primary model failed after %s attempts: %s",
+                        model_key,
+                        MAX_RETRIES,
+                        message,
+                    )
+                    break
+                raise CollectionError(
+                    f"{model_key} failed after {MAX_RETRIES} attempts: {message}",
+                    retryable=False,
+                    status_code=status_code,
+                ) from last_error
 
-        wait = min(RETRY_MAX_WAIT_SECONDS, RETRY_BACKOFF_BASE ** attempt)
-        logger.warning(
-            "[%s] attempt %s/%s failed; retrying in %.1fs: %s",
-            model_key,
-            attempt,
-            MAX_RETRIES,
-            wait,
-            message,
-        )
-        time.sleep(wait)
+            wait = min(RETRY_MAX_WAIT_SECONDS, RETRY_BACKOFF_BASE ** attempt)
+            logger.warning(
+                "[%s] attempt %s/%s failed for model_id=%s; retrying in %.1fs: %s",
+                model_key,
+                attempt,
+                MAX_RETRIES,
+                active_config.model_id,
+                wait,
+                message,
+            )
+            time.sleep(wait)
 
     raise CollectionError(f"{model_key} failed unexpectedly.", retryable=False)
 
